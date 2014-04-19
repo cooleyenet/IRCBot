@@ -6,15 +6,12 @@ using System.IO;
 using System.Threading;
 using System.Text.RegularExpressions;
 /* 
-* This program establishes a connection to irc server and joins a channel. Thats it.
-*
 * Coded by Pasi Havia 17.11.2001 http://koti.mbnet.fi/~curupted
-*
 * Updated / fixed by Blake 09.10.2010
+* Updated by Everett Cooley
 */
 namespace IrcBot
 {
-
     class IrcBot
     {
         // Irc server to connect 
@@ -27,7 +24,6 @@ namespace IrcBot
         public static string NICK = ConfigurationManager.AppSettings["NICK"];
         // Channel to join
         public static string CHANNEL = ConfigurationManager.AppSettings["CHANNEL"];
-
         public static StreamWriter writer;
         static void Main()
         {
@@ -36,74 +32,58 @@ namespace IrcBot
             string inputLine;
             string inputLowerCase;
             StreamReader reader;
+            var JoinedChannel = false;
             try
             {
                 irc = new TcpClient(SERVER, PORT);
                 stream = irc.GetStream();
                 reader = new StreamReader(stream);
                 writer = new StreamWriter(stream);
-                writer.WriteLine("NICK " + NICK);
-                writer.Flush();
-                writer.WriteLine(USER);
-                writer.Flush();
+                IrcInput("NICK " + NICK);
+                IrcInput(USER);
                 while (true)
                 {
                     while ((inputLine = reader.ReadLine()) != null)
                     {
-
-
-                        Console.WriteLine("<-" + inputLine);
-
-                        if (inputLine.StartsWith(":" + NICK) == false)
-                        {
-                            inputLowerCase = inputLine.ToLower();
-                                                       
-                            //if (Regex.IsMatch(inputLowerCase, @"mag|gun|shoot|nra|shot"))
-                            if (Regex.IsMatch(inputLowerCase, ConfigurationManager.AppSettings["NSATRIGGER"]))
-                            {
-                            //writer.WriteLine("PRIVMSG  " + CHANNEL + " /me has logged message");
-                            //writer.Flush();
-                                IrcReply();
-                                //ConfigurationManager.RefreshSection("appSettings");
-                            }
-                            if (Regex.IsMatch(inputLowerCase, @"reload settings"))
-                            {
-                                ConfigurationManager.RefreshSection("appSettings");
-                            }
-                        }
-
-
+                        Console.WriteLine("OUTPUT: " + inputLine);
                         // Split the lines sent from the server by spaces. This seems the easiest way to parse them.
                         string[] splitInput = inputLine.Split(new Char[] { ' ' });
-
                         if (splitInput[0] == "PING")
                         {
                             string PongReply = splitInput[1];
-                            //Console.WriteLine("->PONG " + PongReply);
-                            writer.WriteLine("PONG " + PongReply);
-                            writer.Flush();
+                            IrcInput("PONG " + PongReply);
                             continue;
                         }
-
                         switch (splitInput[1])
                         {
-                            // This is the 'raw' number, put out by the server. Its the first one
-                            // so I figured it'd be the best time to send the join command.
-                            // I don't know if this is standard practice or not.
-                            case "001":
+                            // Join CHANNEL after MOTD displays or fails to display
+                            case "422": case "376":
                                 string JoinString = "JOIN " + CHANNEL;
-                                writer.WriteLine(JoinString);
-                                writer.Flush();
-                                //writer.WriteLine("PART #chat");
-                                //writer.Flush();
-                                //string consoleinput = Console.ReadLine();
-                                //writer.WriteLine("PRIVMSG " + CHANNEL + " " + consoleinput + " :\r\n");
-                                //writer.Flush();
+                                IrcInput(JoinString);
+                                Thread.Sleep(2000);
+                                JoinedChannel = true;
                                 break;
                             default:
                                 break;
                         }
+                        if (JoinedChannel == true)
+                        {
+                            if (inputLine.StartsWith(":" + NICK) == false)
+                            {
+                                inputLowerCase = inputLine.ToLower();
 
+                                //if (Regex.IsMatch(inputLowerCase, @"mag|gun|shoot|nra|shot"))
+                                if (Regex.IsMatch(inputLowerCase, ConfigurationManager.AppSettings["NSATRIGGER"]))
+                                {
+                                    IrcReply();
+                                    //ConfigurationManager.RefreshSection("appSettings");
+                                }
+                                if (Regex.IsMatch(inputLowerCase, @"reload settings"))
+                                {
+                                    ConfigurationManager.RefreshSection("appSettings");
+                                }
+                            }
+                        }
                     }
                     // Close all streams
                     writer.Close();
@@ -122,7 +102,14 @@ namespace IrcBot
         static void IrcReply()
         {
             //writer.WriteLine("PRIVMSG  " + CHANNEL + " \0001ACTION " + " has logged message" + "\0001");
-            writer.WriteLine(String.Format("PRIVMSG {0} \u0001ACTION {1}\u0001", CHANNEL, "logs message"));
+            //writer.WriteLine(String.Format("PRIVMSG {0} \u0001ACTION {1}\u0001", CHANNEL, "logs message"));
+            //writer.Flush();
+            IrcInput(String.Format("PRIVMSG {0} \u0001ACTION {1}\u0001", CHANNEL, "logs message"));
+        }
+        static void IrcInput(string IrcInput)
+        {
+            writer.WriteLine(IrcInput);
+            Console.WriteLine("INPUT:  " + IrcInput);
             writer.Flush();
         }
     }
